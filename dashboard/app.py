@@ -7,7 +7,10 @@ from datetime import datetime
 st.set_page_config(layout="wide")
 st.title("Forging Plant Digital Twin Dashboard Suite")
 
-API_URL = "http://localhost:8000/full-analytics"  # Change to your deployed backend if needed
+API_URL = "http://localhost:8000/full-analytics"
+CLOSED_LOOP_URL = "http://localhost:8000/closed-loop-optimization"
+SOP_URL = "http://localhost:8000/ai-sop-recommendation"
+ASSISTANT_URL = "http://localhost:8000/digital-worker-assistant"
 
 # --- Synthetic Data Generator ---
 def generate_synthetic_kpi_data():
@@ -65,16 +68,42 @@ def fetch_analytics():
     try:
         resp = requests.get(API_URL, timeout=2)
         if resp.status_code == 200:
-            st.info("Fetched data from backend API.")
             return resp.json()
         else:
-            st.warning("Backend error, using synthetic data.")
             return generate_synthetic_kpi_data()
     except Exception:
-        st.info("Backend not reachable, using synthetic KPIs.")
         return generate_synthetic_kpi_data()
 
-# --- Synthetic Monthly Data for Scorecard ---
+def fetch_closed_loop():
+    try:
+        resp = requests.get(CLOSED_LOOP_URL, timeout=2)
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            return None
+    except Exception:
+        return None
+
+def fetch_sop():
+    try:
+        resp = requests.get(SOP_URL, timeout=2)
+        if resp.status_code == 200:
+            return resp.json()
+        else:
+            return None
+    except Exception:
+        return None
+
+def ask_assistant(query):
+    try:
+        resp = requests.post(ASSISTANT_URL, json={"query": query}, timeout=2)
+        if resp.status_code == 200:
+            return resp.json()["response"]
+        else:
+            return "Assistant not available (backend error)."
+    except Exception:
+        return "Assistant not available (backend offline)."
+
 def generate_monthly_synthetic_data(months=6):
     base = datetime(2025, 1, 1)
     dates = [base.replace(month=((base.month + i - 1) % 12 + 1)) for i in range(months)]
@@ -90,7 +119,12 @@ def generate_monthly_synthetic_data(months=6):
 # --- Main App ---
 DASHBOARD = st.sidebar.radio(
     "Choose dashboard:",
-    ("Executive (GHG, Energy, Productivity)", "Operator (Alerts, Setpoints, Tracking)", "Sustainability Scorecard")
+    (
+        "Executive (GHG, Energy, Productivity)",
+        "Operator (Alerts, Setpoints, Tracking)",
+        "Sustainability Scorecard",
+        "AI/Assistant & Optimization"
+    )
 )
 
 analytics = fetch_analytics()
@@ -102,26 +136,22 @@ emissions = analytics["emissions"]
 if DASHBOARD == "Executive (GHG, Energy, Productivity)":
     st.header("Executive Dashboard")
     col1, col2, col3 = st.columns(3)
-    # GHG
     with col1:
         st.subheader("GHG Emissions")
         st.metric("Scope 1 (kgCO₂e)", f"{emissions['scope_1']:.1f}")
         st.metric("Scope 2 (kgCO₂e)", f"{emissions['scope_2']:.1f}")
         st.metric("Total GHG (kgCO₂e)", f"{emissions['total_ghg']:.1f}")
-    # Energy
     with col2:
         st.subheader("Energy Intensity")
         st.metric("Electricity per Unit (kWh/unit)", f"{kpis['electricity_per_unit']:.3f}")
         st.metric("Gas per Unit (Nm³/unit)", f"{kpis['gas_per_unit']:.3f}")
         st.metric("Water per Unit (m³/unit)", f"{kpis['water_per_unit']:.3f}")
-    # Productivity
     with col3:
         st.subheader("Productivity")
         st.metric("OEE (%)", f"{kpis['oee']*100:.1f}")
         st.metric("Throughput Rate (units/hr)", f"{kpis['throughput_rate']:.2f}")
         st.metric("First Pass Yield (%)", f"{kpis['first_pass_yield']:.1f}")
-    # Trend demo
-    st.subheader("Electricity, Gas, and Water Usage Over Time (Synthetic Example)")
+    st.subheader("Resource Usage Over Time (Synthetic Example)")
     dates = pd.date_range("2025-01-01", periods=30)
     df = pd.DataFrame({
         "Date": dates,
@@ -173,4 +203,32 @@ elif DASHBOARD == "Sustainability Scorecard":
     score = max(0, 100 - (latest["GHG total (tCO₂e)"]-200)/2)
     st.metric("Sustainability Score (demo)", f"{score:.1f} / 100")
 
-st.caption("Digital Twin Dashboard | Executive, Operator, and Sustainability Views")
+# --- AI/Assistant & Optimization Dashboard ---
+elif DASHBOARD == "AI/Assistant & Optimization":
+    st.header("AI/ML Optimization & Digital Worker Assistant")
+
+    # Closed-loop optimization
+    st.subheader("🔄 Closed-Loop Furnace Optimization (ML Feedback Loop)")
+    cl_opt = fetch_closed_loop()
+    if cl_opt:
+        st.write(f"**Recommended Furnace Temp Setpoint:** {cl_opt['furnace_temp_setpoint']} °C")
+        st.info(cl_opt["reason"])
+    else:
+        st.warning("Closed-loop optimization not available (backend offline).")
+
+    # AI-driven SOP
+    st.subheader("🤖 AI-Driven SOP Recommendation")
+    sop = fetch_sop()
+    if sop:
+        st.success(sop["recommendation"])
+    else:
+        st.info("SOP recommendation not available (backend offline).")
+
+    # Digital Worker Assistant (NLP)
+    st.subheader("👷 Digital Worker Assistant (NLP Q&A)")
+    user_query = st.text_input("Ask a question about alerts, KPIs, or trends:")
+    if user_query:
+        resp = ask_assistant(user_query)
+        st.write(resp)
+
+st.caption("Digital Twin Dashboard | Executive, Operator, Sustainability, and AI/Assistant Views")
