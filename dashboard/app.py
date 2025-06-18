@@ -6,7 +6,7 @@ import requests
 st.set_page_config(layout="wide")
 st.title("Forging Plant Digital Twin - Advanced KPI & Analytics Dashboard")
 
-API_URL = "http://localhost:8000/full-analytics"  # Update to your deployed backend if needed
+API_URL = "http://localhost:8000/full-analytics"  # Update to deployed backend if needed
 
 def generate_synthetic_kpi_data():
     output = np.random.uniform(480, 590)
@@ -35,6 +35,7 @@ def generate_synthetic_kpi_data():
             "die_temp": np.random.uniform(200, 400),
             "die_wear_rate": np.random.uniform(0, 1),
             "water_discharge_temp": np.random.uniform(30, 40),
+            "furnace_temp": np.random.uniform(1150, 1250),
         },
         "alerts": [],
         "energy_optimization": {"inefficiency_score": np.random.randint(0,4), "electricity_forecast": elec/output},
@@ -104,7 +105,6 @@ if alerts:
 else:
     st.success("No critical alerts at this time.")
 
-# --- Energy & Emissions Section ---
 with st.expander("Energy & Emissions Analytics", expanded=True):
     st.write(f"**Energy Inefficiency Score:** {energy_opt['inefficiency_score']}")
     if energy_opt["electricity_forecast"]:
@@ -115,17 +115,42 @@ with st.expander("Energy & Emissions Analytics", expanded=True):
     st.write(f"**Total GHG:** {emissions['total_ghg']:.2f} kgCO₂e")
     st.write(f"**Flue Gas [CO₂]:** {emissions['flue_CO2']:.2f}% | [NOₓ]: {emissions['flue_NOx']:.3f}% | [SOₓ]: {emissions['flue_SOx']:.3f}%")
 
-# --- Predictive Maintenance Section ---
 with st.expander("Predictive Maintenance"):
     st.write(f"**Estimated Die Remaining Useful Life:** {maintenance['die_rul_cycles']} cycles" if maintenance['die_rul_cycles'] is not None else "No RUL anomaly detected.")
 
-# --- What-If Simulation Section ---
 with st.expander("What-if Simulation (10% Less Gas Consumption)"):
     if whatif:
         st.write("KPIs under scenario:")
         st.json(whatif)
     else:
         st.info("No scenario data available.")
+
+# --- Closed-loop optimization ---
+st.subheader("🔄 Closed-Loop Furnace Optimization (ML Feedback Loop)")
+try:
+    cl_opt = requests.get("http://localhost:8000/closed-loop-optimization", timeout=2).json()
+    st.write(f"**Recommended Furnace Temp Setpoint:** {cl_opt['furnace_temp_setpoint']} °C")
+    st.info(cl_opt["reason"])
+except Exception:
+    st.warning("Closed-loop optimization not available (backend offline).")
+
+# --- AI-Driven SOP Recommendations ---
+st.subheader("🤖 AI-Driven SOP Recommendation")
+try:
+    sop = requests.get("http://localhost:8000/ai-sop-recommendation", timeout=2).json()
+    st.success(sop["recommendation"])
+except Exception:
+    st.info("SOP recommendation not available (backend offline).")
+
+# --- Digital Worker Assistant ---
+st.subheader("👷 Digital Worker Assistant (NLP Q&A)")
+user_query = st.text_input("Ask a question about alerts, KPIs, or trends:")
+if user_query:
+    try:
+        resp = requests.post("http://localhost:8000/digital-worker-assistant", json={"query": user_query}, timeout=2).json()
+        st.write(resp["response"])
+    except Exception:
+        st.info("NLP assistant not available (backend offline).")
 
 # --- Example Visualizations (Synthetic Time Series) ---
 np.random.seed(0)
