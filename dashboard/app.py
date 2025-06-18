@@ -1,11 +1,9 @@
-import dash
-from dash import dcc, html, Input, Output
-import plotly.graph_objs as go
-import requests
-import numpy as np
+import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.express as px
 
-# For demo, generate synthetic time-series
+# Generate synthetic data
 np.random.seed(0)
 time_stamps = pd.date_range("2025-01-01", periods=100, freq="H")
 data = pd.DataFrame({
@@ -18,82 +16,35 @@ data = pd.DataFrame({
 })
 data["yield"] = data["production_output"] / data["material_input"]
 
-def fetch_optimization():
-    # Simulate API call to FastAPI backend
-    url = "http://localhost:8000/optimize-and-project"
-    try:
-        res = requests.post(url, json=data.iloc[-1].to_dict(), timeout=2)
-        if res.status_code == 200:
-            return res.json()
-    except Exception:
-        pass
-    return None
+st.title("Forging Plant Digital Twin - GHG & Resource Dashboard")
 
-app = dash.Dash(__name__)
+tab1, tab2, tab3 = st.tabs(["Time Series", "Yield Distribution", "Scenario Comparison"])
 
-app.layout = html.Div([
-    html.H2("Forging Plant Digital Twin - GHG & Resource Dashboard"),
-    dcc.Tabs([
-        dcc.Tab(label='Time Series', children=[
-            dcc.Graph(
-                id='time-series',
-                figure={
-                    "data": [
-                        go.Scatter(x=data["timestamp"], y=data["power_usage"], name="Electricity (kWh)"),
-                        go.Scatter(x=data["timestamp"], y=data["gas_consumption"], name="Natural Gas (Nm³/hr)"),
-                        go.Scatter(x=data["timestamp"], y=data["water_usage"], name="Water (m³/hr)"),
-                    ],
-                    "layout": go.Layout(title="Resource Usage Over Time", xaxis={"title": "Time"}, yaxis={"title": "Usage"})
-                }
-            )
-        ]),
-        dcc.Tab(label='Yield Distribution', children=[
-            dcc.Graph(
-                id='yield-dist',
-                figure={
-                    "data": [
-                        go.Histogram(x=data["yield"], nbinsx=20, name="Yield Distribution"),
-                    ],
-                    "layout": go.Layout(title="Yield Distribution", xaxis={"title": "Yield (%)"}, yaxis={"title": "Count"})
-                }
-            )
-        ]),
-        dcc.Tab(label='Scenario Comparison', children=[
-            html.Button("Fetch Optimization Scenario", id="fetch-btn"),
-            dcc.Loading(
-                id="loading",
-                children=[dcc.Graph(id="scenario-bar")],
-                type="default"
-            ),
-            html.Div(id="ghg-reduction")
-        ])
-    ])
-])
+with tab1:
+    st.subheader("Resource Usage Over Time")
+    fig = px.line(data, x="timestamp", y=["power_usage", "gas_consumption", "water_usage"])
+    st.plotly_chart(fig, use_container_width=True)
 
-@app.callback(
-    [Output("scenario-bar", "figure"),
-     Output("ghg-reduction", "children")],
-    [Input("fetch-btn", "n_clicks")]
-)
-def update_scenario(n_clicks):
-    if not n_clicks:
-        return go.Figure(), ""
-    result = fetch_optimization()
-    if not result:
-        return go.Figure(), "No data available."
+with tab2:
+    st.subheader("Yield Distribution")
+    fig = px.histogram(data, x="yield", nbins=20, title="Yield Distribution")
+    st.plotly_chart(fig, use_container_width=True)
+
+with tab3:
+    st.subheader("Scenario Comparison")
+    st.info("Backend optimization and GHG calculation requires a public backend API. Using static demo for Streamlit Cloud.")
+    # Simulate scenario
     resources = ["power_usage", "gas_consumption", "water_usage"]
-    current = [result["current_usage"][r] for r in resources]
-    optimized = [result["optimized_usage"][r] for r in resources]
-    ghg = [result["current_ghg"]["total_ghg"], result["optimized_ghg"]["total_ghg"]]
-    fig = go.Figure(data=[
-        go.Bar(name='Current', x=resources, y=current),
-        go.Bar(name='Optimized', x=resources, y=optimized),
-        go.Bar(name='Current vs Optimized GHG', x=["GHG Emissions"], y=[ghg[0]], marker_color="gray"),
-        go.Bar(name='GHG After Optimization', x=["GHG Emissions"], y=[ghg[1]], marker_color="green"),
-    ])
-    fig.update_layout(barmode='group', title="Scenario Resource & GHG Comparison")
-    reduction = result["ghg_reduction"]
-    return fig, f"Estimated GHG Reduction: {reduction:.2f} kg CO₂e/hr"
-
-if __name__ == "__main__":
-    app.run_server(debug=True)
+    current = [data[res].mean() for res in resources]
+    optimized = [c * 0.9 for c in current]  # Simulate 10% reduction
+    ghg = [sum(current), sum(optimized)]
+    comparison_df = pd.DataFrame({
+        "Resource": resources + ["GHG Emissions"],
+        "Current": current + [ghg[0]],
+        "Optimized": optimized + [ghg[1]],
+    })
+    fig = px.bar(comparison_df.melt(id_vars="Resource", value_vars=["Current", "Optimized"]),
+                 x="Resource", y="value", color="variable", barmode="group",
+                 title="Scenario Resource & GHG Comparison")
+    st.plotly_chart(fig, use_container_width=True)
+    st.success(f"Estimated GHG Reduction: {ghg[0] - ghg[1]:.2f} units/hr")
