@@ -1,9 +1,0 @@
-streamlit
-fastapi
-uvicorn
-pydantic
-numpy
-scikit-learn
-pandas
-plotly
-requests
